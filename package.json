@@ -1,0 +1,25 @@
+{
+  "name": "@scinorandex/layout",
+  "version": "0.0.2",
+  "description": "Generate next.js layouts with ease",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github.com/scinscinscin/layout"
+  },
+  "keywords": [
+    "react",
+    "next.js",
+    "frameworks"
+  ],
+  "author": "scinorandex",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/react": "18.2.21",
+    "next": "13.4.19"
+  }
+}
