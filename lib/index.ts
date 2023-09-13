@@ -27,7 +27,14 @@ type GenerateLayoutOptions<Obj extends GenerateLayoutOptionsInterface> = {
     Obj["ExportedInternalProps"],
     { generateExportedInternalProps: (internalProps: Obj["InternalProps"]) => Obj["ExportedInternalProps"] }
   >
->;
+> &
+  (
+    | {
+        deserialize: (original: any) => any;
+        serialize: (serialized: any) => any;
+      }
+    | {}
+  );
 
 export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   generateLayoutOptions: GenerateLayoutOptions<Obj>
@@ -69,7 +76,8 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
               ? await generateLayoutOptions.generateInternalProps(context)
               : ({} as InternalProps);
 
-          return { props: { serverSideProps, internalProps } };
+          const props = { serverSideProps, internalProps };
+          return { props: "serialize" in generateLayoutOptions ? generateLayoutOptions.serialize(props) : props };
         } else {
           // Something wrong happened inside the passthrough function so return its output
           return passthroughResults;
@@ -92,7 +100,10 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   >;
 
   function createPage<ServerSideProps>(createPageOptions: CreatePageOptions<ServerSideProps>) {
-    function defaultExport(props: { serverSideProps: ServerSideProps; internalProps: InternalProps }) {
+    function defaultExport(_props: { serverSideProps: ServerSideProps; internalProps: InternalProps }) {
+      const props: typeof _props =
+        "deserialize" in generateLayoutOptions ? generateLayoutOptions.deserialize(_props) : _props;
+
       const exportedInternalProps =
         "generateExportedInternalProps" in generateLayoutOptions
           ? generateLayoutOptions.generateExportedInternalProps(props.internalProps)
