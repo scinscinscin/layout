@@ -1,116 +1,145 @@
-# @scinorandex/layout
+### @scinorandex/layout
 
-**Because creating typesafe layouts in Next.js should be easier.**
+Create typesafe layouts with Next.js Pages router.
 
-A layout is an interface that is common to all pages, such as a header and footer. Sometimes, data needs to be fetched server side to populate these layouts. 
-![](./assets/image.png "Data flow")
+--- 
 
-**The diagram shows the typical flow of data between in a website.**
+### Use case
 
- - **Internal props** - the server side data that the layout needs
-   - this could be the profile of the currently logged in user
-   - the header of the website might contain a list of sections fetched from the database
- - **Page props** - the server side data that the page needs
- - **Layout props** - Props from the frontend that tell the layout how to behave
-   - Some pages might require you to disable the footer / header based on state
- - **Exported Internal Props** - A subset of internal props that is provided to all pages that use that layout
-   - Pages might require the same data that is already fetched by the layout's backend, which can be reused to prevent code duplication
+Your layout component needs data from the server (such as the currently logged in user) and you don't want to request it on the client side when the page loads. You must fetch the data with getServerSideProps and pass it to the layout.
 
-We need a way to reconcile all the different paths that data will travel, something that Next.js doesn't provide out of the box. This is the problem that `@scinorandex/layout` solves.
+This package makes it easy to send data between the client and server, and from getServerSideProps and the page function.
 
-# Usage
+### Getting Started
 
-The package works by effortlessly wrapping pages and `getServerSideProps` in layouts.
+**To get started, install the package in your Next.js Pages router project:**
+```bash
+yarn add @scinorandex/layout # or 'npm install @scinorandex/layout'
+```
 
-## Creating layouts
+**Create a new file for your layout and import the ff:**
+```ts
+import { GenerateLayout, DefaultLayoutOptions } from "@scinorandex/layout";
+```
 
-Once the package has been installed, you can create a layout using the `GenerateLayout()` function. This function takes one type parameter and one function parameter.
+**Define the types of data to be transferred between the different parts of the layout:**
+```ts
+interface PrivateLayoutOpts extends DefaultLayoutOptions {
+  ServerSideLayoutProps: { user: UserT };
+  ClientSideLayoutProps: { title: string };
+  ExportedInternalProps: { user: UserT };
+  ServerSidePropsContext: { user: User; db: PrismaClient };
+  LayoutGSSPOptions: { permisisonRequired: "admin" | "superadmin" };
+}
+```
+
+**What each property means and where it's used:**
+
+ - `ServerSideLayoutProps` - data that the layout component needs from the server
+   - The layout component shows the user's profile, so we need the user DTO from the server.
+ - `ClientSideLayoutProps` - data that the layout component needs from the page component
+   - The layout component needs the title of the page (passed into `next-seo`) 
+ - `ExportedInternalProps` - data that the layout component passes into the page component
+   - The layout component passes the user DTO it got from the server into the page componen
+ - `ServerSidePropsContext` - data that's passed from the layout's gSSP function and into the page's gSSP
+   - Some page's gSSP might need the user object, which the layout's gSSP already calculated. This allows the reuse objects between the layout and page gSSPs. 
+ - `LayoutGSSPOptions` - Options that are passed from the page and into
+   - This allows you to pass parameters into the layout's gSSP. In this case, you can set the minimum required authorization for the user to access the page. 
+
+All of the properties are optional, default types are provided by `DefaultLayoutOptions`
+
+**Data flow visualization:**
+![Data flow using the library](./assets/image.png)
+
+**Now it's time to implement the necessary functions:**
 
 ```tsx
-import { User } from "@prisma/client";
-import { GenerateLayout } from "@scinorandex/layout";
-import { authenticate } from "../utils/auth";
-
-export const PublicLayout = GenerateLayout<{
-  // The data that the layout needs to fetch server side
-  InternalProps: { user: User, currentTime: string };
-  // The data that the layout wants to provide to all pages that use it
-  ExportedInternalProps: { user: User };
-  // The properties that allows pages to control the layout's appearance
-  LayoutProps: { showHeader: boolean };
-}>({
-  // You don't need to define this function if your InternalProps is empty ({})
-  async generateInternalProps(ctx) {
-    const currentlyLoggedInUser = authenticate(ctx);
-    const serverTime = (new Date()).toISOString();
-    
-    return { user, serverTime };
+export const PrivateLayout = GenerateLayout<PrivateLayoutOpts>({
+  // You're asked to implement this method if ExportedInternalProps has properties defined
+  // This method determines the exported internal props from the layout's gSSP method
+  generateExportedInternalProps(internalProps){ 
+    return { user: internalProps.user } 
   },
 
-  // You don't need to define this function if your ExportedInternalProps is empty ({})
-  generateExportedInternalProps(internalProps) {
-    return { user: internalProps.user };
-  },
-
-  // layoutProps comes from the page that uses the layout
-  layoutComponent: ({ internalProps, layoutProps }) => {
+  // This is the React component that wraps around your page
+  // layoutProps is ClientSideLayoutProps & { children: React.ReactNode } and comes from the page
+  // internalProps is ServerSideLayoutProps and comes from the layout's gSSP method 
+  layoutComponent({ layoutProps, internalProps }) {
     return (
-      <div>
-        {layoutProps.showHeader && (
-          <header>
-            <h1>The current time is: {internalProps.serverTime}</h1>
-            <h1>The currently logged in user is: {internalProps.user.username}</h1>
-          </header>
-        )}
-
-        <main>
-          {layoutProps.children}
-        </main>
+      <div className={styles.root}>
+        <NextSeo title={layoutProps.title} openGraph={{ title: layoutProps.title }} />
         
-        <footer>Copyright 2023</footer>
+        <header className={styles.header}>
+          <div className={styles.inner}>
+            <h1>Petbook</h1>
+            <p>{internalProps.user.username}</p>
+          </div>
+        </header>
+
+        <main className={styles.main}>{layoutProps.children}</main>
       </div>
     );
+  },
+
+  // You're asked to implement getServerSideProps if ServerSideLayoutProps has properties defined
+  // Here, you can fetch data for the layout, and even do middleware-like auth checking
+  // ctx is the Next.js GetServerSidePropsContext object
+  // options is the LayoutGSSPOptions object from the page
+  async getServerSideProps(ctx, options) {
+    const user = await getUser(ctx);
+
+    // if the user isn't logged in, then redirect back to login page
+    if (!user) return { redirect: { destination: "/login", permanent: false } };
+    
+    // if the user doesn't have necessary permissions, redirect to a forbidden page
+    if (options.permissionRequired === "superadmin" && user.accountType === "admin")
+      return { redirect: { destination: "/forbidden", permanent: false } };
+
+    return { 
+      props: {
+        // This is the data sent to the layout component, and is typed as ServerSideLayoutProps
+        layout: { user: Cleanse.user(user) },
+        // This is the data sent to the page's getServerSideProps handelr, and is typed as ServerSidePropsContext 
+        locals: { user, db } 
+      } 
+    };
   },
 });
 ```
 
-## Using the layout
+**Use the layout:**
 
-Created layouts have a `createPage()` method that takes in one type parameter that specifies the server-side data for the page, and one function parameter.
+Now that the layout is defined, we can finally use it in a page.
 
 ```tsx
-import { PublicLayout } from "../layout/public";
-import ReactMarkdown from "react-markdown";
+// The createPage method accepts a type parameter that dictates the server side props required by the page  
+const Page = PrivateLayout.createPage<{ petNames: string[] }>({
+  layoutGsspOptions: { permisisonRequired: "admin" },
 
-const Page = PublicLayout.createPage<{ markdown: string }>({
-  // You don't need to define this function if the type parameter you pass is empty ({})
-  async getServerSideProps(ctx) {
-    const uuid = ctx.params.uuid as string;
-    const markdown = await fetchPostFromDatabase(uuid);
-    return { markdown };
+  // You're asked to implement the page's getServerSideProps method if createPage's type parameter has properties defined
+  // ctx - the Next.js GetServerSidePropsContext object
+  // locals - the locals object passed from the layout's getServerSideProps output
+  async getServerSideProps(ctx, locals) {
+    const pets = await db.pets.findMany({ where: { ownerUuid: locals.user.uuid } })
+    return { props: { petNames: pets.map(pet => pet.name) } }
   },
 
-  // We can (optionally) cache the page props for improved performance 
-  cacheServerSideProps: {
-    // Generate a unique hash for the requested page (like a post uuid)
-    hash: (ctx) => ctx.params.uuid as string,
-    // Cache data in 10 minute intervals
-    timeoutInMs: 10 * 60 * 1000,
-  },
-
-  // The props this function receives is the combination of the
-  // page props and exported internal props
-  page: ({ markdown, user }) => {
+  // This is the page-specific frontend code. 
+  // Its return type is ClientSideLayoutProps & { children: React.ReactNode }
+  // Props is a merging of the result of getServerSideProps and ExportedInternalProps
+  // In this case its type is { petNames: string[], user: UserT }
+  page(props) {
     return {
-      showHeader: true,
-      children: <>
-        <ReactMarkdown>{markdown}</ReactMarkdown>
-      </>,
+      title: "List of Pets",
+      children: <div>
+        <ul>
+          {props.petNames.map(petName => ( <li>{petName}</li> ))}
+        </ul>
+      </div>
     };
   },
 });
 
-// Export the wrapped pages and getServerSideProps for next.js to use
 export default Page.defaultExport;
 export const getServerSideProps = Page.getServerSideProps;
 ```
