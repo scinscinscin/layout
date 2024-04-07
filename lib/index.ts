@@ -1,11 +1,15 @@
 import type { GetServerSidePropsContext, GetServerSidePropsResult } from "next";
 import type React from "react";
+import { Cache, LRU } from "./lru";
+import crypto from "node:crypto";
 
 type KIfTIsNotEmpty<T, K> = {} extends T ? {} : K;
 type WithChildren<T> = T & { children: React.ReactNode };
 
-interface CachingOptions {
-  hash: (ctx: GetServerSidePropsContext) => string;
+interface CachingOptions<ServerSidePropsContext> {
+  hash: {} extends ServerSidePropsContext
+    ? (ctx: GetServerSidePropsContext) => string
+    : (ctx: GetServerSidePropsContext, locals: ServerSidePropsContext) => string;
   timeoutInMs: number;
 }
 
@@ -38,6 +42,8 @@ type LayoutGetServerSideProps<Obj extends GenerateLayoutOptionsInterface> = GetS
 // prettier-ignore
 type GenerateLayoutOptions<Obj extends GenerateLayoutOptionsInterface> = {
   exceptionHandler?: (err: any) => Promise<GetServerSidePropsResult<any>>;
+  generateCache?: <K, V>(pageUuid: string) => Cache<K, V>;
+  serializer?: { serialize: (original: any) => any, deserialize: (serialized: any) => any }
   layoutComponent: (props: {internalProps: Obj["ServerSideLayoutProps"]; layoutProps: WithChildren<Obj["ClientSideLayoutProps"]>}) => React.ReactNode;
 }
 & KIfTIsNotEmpty<Obj["ServerSideLayoutProps"] & Obj["ServerSidePropsContext"],
@@ -50,7 +56,6 @@ type GenerateLayoutOptions<Obj extends GenerateLayoutOptionsInterface> = {
 & KIfTIsNotEmpty<Obj["ServerSideLayoutProps"], KIfTIsNotEmpty<Obj["ExportedInternalProps"],
 	{ generateExportedInternalProps: (internalProps: Obj["ServerSideLayoutProps"]) => Obj["ExportedInternalProps"] }
 >>
-& ({ deserialize: (original: any) => any; serialize: (serialized: any) => any } | {});
 
 export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   generateLayoutOptions: GenerateLayoutOptions<Obj>
@@ -61,16 +66,19 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   type ServerSidePropsContext = Obj["ServerSidePropsContext"];
   type LayoutGSSPOptions = Obj["LayoutGSSPOptions"];
 
+  const cacheGenerator = generateLayoutOptions.generateCache || (() => new LRU(100));
+
   function generateGetServerSideProps<Props>(
     passthrough: {} extends ServerSideLayoutProps
       ? (ctx: GetServerSidePropsContext) => Promise<GetServerSidePropsResult<Props>>
       : (ctx: GetServerSidePropsContext, locals: ServerSidePropsContext) => Promise<GetServerSidePropsResult<Props>>,
-    options: { caching?: CachingOptions; layoutGsspOptions?: LayoutGSSPOptions }
+    options: { caching?: CachingOptions<ServerSidePropsContext>; layoutGsspOptions?: LayoutGSSPOptions }
   ): (
     context: GetServerSidePropsContext
   ) => Promise<GetServerSidePropsResult<{ serverSideProps: Props; internalProps: ServerSideLayoutProps }>> {
-    const localCache = new Map<string, GetServerSidePropsResult<Props>>();
+    const localCache = cacheGenerator(crypto.randomUUID()) as Cache<string, GetServerSidePropsResult<Props>>;
 
+    // The function exported under `getServerSideProps` by the page
     return async function (context) {
       try {
         // calculate server side layout props
@@ -79,36 +87,43 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
             ? await generateLayoutOptions.getServerSideProps(context, options.layoutGsspOptions)
             : { props: {} };
 
-        if ("props" in layoutServerSideResult) {
-          const layoutGetServerSideProps = await layoutServerSideResult.props;
-          let passthroughResults: GetServerSidePropsResult<Props>;
+        // Something wrong happened inside the generateInternalProps function, so return its output
+        if (!("props" in layoutServerSideResult)) return layoutServerSideResult;
+        const layoutGetServerSideProps = await layoutServerSideResult.props;
 
-          if (options.caching != undefined) {
-            const cachingKey = options.caching.hash(context);
+        // Fetch the results of the passthrough function
+        const locals = layoutGetServerSideProps.locals ?? {};
+        let passthroughResults: GetServerSidePropsResult<Props> | undefined = undefined;
 
-            if (!localCache.has(cachingKey)) {
-              passthroughResults = await passthrough(context, layoutGetServerSideProps.locals ?? {});
-              localCache.set(cachingKey, passthroughResults);
-              setTimeout(() => localCache.delete(cachingKey), options.caching.timeoutInMs);
-            } else {
-              passthroughResults = localCache.get(cachingKey)!;
-            }
-          } else {
-            passthroughResults = await passthrough(context, layoutGetServerSideProps.locals ?? {});
-          }
+        // If the page has caching options enabled then try to fetch from the cache
+        if (options.caching != undefined) {
+          // Generate the caching key for the request from its context and fetch data
+          // if there was an error with the cache, then default to undefined
+          const cachingKey = options.caching.hash(context, locals);
+          const cacheHit = await localCache.get(cachingKey).catch(() => undefined);
 
-          if ("props" in passthroughResults) {
-            const serverSideProps = await passthroughResults.props;
-            const props = { serverSideProps, internalProps: layoutGetServerSideProps.layout ?? {} };
-            return { props: "serialize" in generateLayoutOptions ? generateLayoutOptions.serialize(props) : props };
-          } else {
-            // Something wrong happened inside the passthrough function so return its output
-            return passthroughResults;
-          }
-        } else {
-          // Something wrong happened inside the generateInternalProps function, so return its output
-          return layoutServerSideResult;
+          // If cache did not have the data, fetch data from passthrough and cache it
+          if (cacheHit === undefined) {
+            passthroughResults = await passthrough(context, locals);
+            localCache.set(cachingKey, passthroughResults, { timeoutInMs: options.caching.timeoutInMs }).catch();
+          } else passthroughResults = cacheHit;
         }
+
+        // Make absolutely sure that passthroughResults is not undefined
+        if (passthroughResults === undefined) passthroughResults = await passthrough(context, locals);
+
+        // Something wrong happened inside the passthrough function so return its output
+        if (!("props" in passthroughResults)) return passthroughResults;
+
+        // Combine serverSideProps and internalProps, serialize it, and return it to the client
+        const serverSideProps = await passthroughResults.props;
+        const props = { serverSideProps, internalProps: layoutGetServerSideProps.layout ?? {} };
+        return {
+          props:
+            typeof generateLayoutOptions.serializer !== "undefined"
+              ? generateLayoutOptions.serializer.serialize(props)
+              : props,
+        };
       } catch (err) {
         if (generateLayoutOptions.exceptionHandler) return await generateLayoutOptions.exceptionHandler(err);
         else throw err;
@@ -121,14 +136,11 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   } & KIfTIsNotEmpty<
     ServerSideProps,
     {
+      // prettier-ignore
       getServerSideProps: {} extends ServerSidePropsContext
         ? (ctx: GetServerSidePropsContext) => Promise<GetServerSidePropsResult<ServerSideProps>>
-        : (
-            ctx: GetServerSidePropsContext,
-            locals: ServerSidePropsContext
-          ) => Promise<GetServerSidePropsResult<ServerSideProps>>;
-
-      cacheServerSideProps?: CachingOptions;
+        : (ctx: GetServerSidePropsContext, locals: ServerSidePropsContext) => Promise<GetServerSidePropsResult<ServerSideProps>>;
+      cacheServerSideProps?: CachingOptions<ServerSidePropsContext>;
     }
   > &
     KIfTIsNotEmpty<LayoutGSSPOptions, { layoutGsspOptions: LayoutGSSPOptions }>;
@@ -136,7 +148,9 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   function createPage<ServerSideProps>(createPageOptions: CreatePageOptions<ServerSideProps>) {
     function defaultExport(_props: { serverSideProps: ServerSideProps; internalProps: ServerSideLayoutProps }) {
       const props: typeof _props =
-        "deserialize" in generateLayoutOptions ? generateLayoutOptions.deserialize(_props) : _props;
+        typeof generateLayoutOptions.serializer !== "undefined"
+          ? generateLayoutOptions.serializer.deserialize(_props)
+          : _props;
 
       const exportedInternalProps =
         "generateExportedInternalProps" in generateLayoutOptions
