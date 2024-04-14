@@ -1,6 +1,7 @@
 import type { GetServerSidePropsContext, GetServerSidePropsResult } from "next";
 import type React from "react";
 import { Cache, LRU } from "./lru";
+import { generateId } from "./generateId";
 
 type KIfTIsNotEmpty<T, K> = {} extends T ? {} : K;
 type WithChildren<T> = T & { children: React.ReactNode };
@@ -75,7 +76,7 @@ export function GenerateLayout<Obj extends GenerateLayoutOptionsInterface>(
   ): (
     context: GetServerSidePropsContext
   ) => Promise<GetServerSidePropsResult<{ serverSideProps: Props; internalProps: ServerSideLayoutProps }>> {
-    const localCache = cacheGenerator(crypto.randomUUID()) as Cache<string, GetServerSidePropsResult<Props>>;
+    const localCache = cacheGenerator(generateId(12)) as Cache<string, GetServerSidePropsResult<Props>>;
 
     // The function exported under `getServerSideProps` by the page
     return async function (context) {
