@@ -3,6 +3,8 @@ import type { GetServerSidePropsContext, GetServerSidePropsResult } from "next";
 import { Cache, LRU } from "./lru";
 import { generateId } from "./generateId";
 import { KIfTIsNotEmpty } from "./utils";
+import { ParsedUrlQuery } from "querystring";
+import { NextParameters } from "./utils";
 
 type LayoutGetServerSideProps<Obj extends GenerateLayoutOptionsInterface> = GetServerSidePropsResult<
   KIfTIsNotEmpty<Obj["ServerSideLayoutProps"], { layout: Obj["ServerSideLayoutProps"] }> &
@@ -39,13 +41,16 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
 
   const cacheGenerator = generateLayoutOptions.generateCache || (() => new LRU(100));
 
-  function generateGetServerSideProps<Props>(
+  function generateGetServerSideProps<Props, Params extends ParsedUrlQuery>(
     passthrough: {} extends ServerSideLayoutProps
-      ? (ctx: GetServerSidePropsContext) => Promise<GetServerSidePropsResult<Props>>
-      : (ctx: GetServerSidePropsContext, locals: ServerSidePropsContext) => Promise<GetServerSidePropsResult<Props>>,
+      ? (ctx: GetServerSidePropsContext<Params>) => Promise<GetServerSidePropsResult<Props>>
+      : (
+          ctx: GetServerSidePropsContext<Params>,
+          locals: ServerSidePropsContext
+        ) => Promise<GetServerSidePropsResult<Props>>,
     options: { caching?: CachingOptions<ServerSidePropsContext>; layoutGsspOptions?: LayoutGSSPOptions }
   ): (
-    context: GetServerSidePropsContext
+    context: GetServerSidePropsContext<Params>
   ) => Promise<GetServerSidePropsResult<{ serverSideProps: Props; internalProps: ServerSideLayoutProps }>> {
     const localCache = cacheGenerator(generateId(12)) as Cache<string, GetServerSidePropsResult<Props>>;
 
@@ -100,19 +105,21 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
     };
   }
 
-  type CreatePageOptions<ServerSideProps> = KIfTIsNotEmpty<
+  type CreatePageOptions<ServerSideProps, Params extends ParsedUrlQuery> = KIfTIsNotEmpty<
     ServerSideProps,
     {
       // prettier-ignore
       getServerSideProps: {} extends ServerSidePropsContext
-        ? (ctx: GetServerSidePropsContext) => Promise<GetServerSidePropsResult<ServerSideProps>>
-        : (ctx: GetServerSidePropsContext, locals: ServerSidePropsContext) => Promise<GetServerSidePropsResult<ServerSideProps>>;
+        ? (ctx: GetServerSidePropsContext<Params>) => Promise<GetServerSidePropsResult<ServerSideProps>>
+        : (ctx: GetServerSidePropsContext<Params>, locals: ServerSidePropsContext) => Promise<GetServerSidePropsResult<ServerSideProps>>;
       cacheServerSideProps?: CachingOptions<ServerSidePropsContext>;
     }
   > &
     KIfTIsNotEmpty<LayoutGSSPOptions, { layoutGsspOptions: LayoutGSSPOptions }>;
 
-  function use<ServerSideProps>(options: CreatePageOptions<ServerSideProps>) {
+  function use<ServerSideProps, Route extends string = "">(
+    options: CreatePageOptions<ServerSideProps, NextParameters<Route>>
+  ) {
     const layoutGsspOptions = "layoutGsspOptions" in options ? options.layoutGsspOptions : {};
     const getServerSideProps =
       "getServerSideProps" in options
