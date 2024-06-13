@@ -7,7 +7,7 @@ type GeneralParams = {
 // prettier-ignore
 type ProcessOptionalParam<Param extends string> = string extends Param ? {}
   : Param extends `...${infer Catchall}`
-    ? { [key in Catchall]: string[] }
+    ? { [key in Catchall]?: string[] }
   : { [key in Param]?: string };
 
 // prettier-ignore
