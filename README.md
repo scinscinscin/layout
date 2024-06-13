@@ -266,6 +266,7 @@ This removes the optional marker from the params field of `GetServerSidePropsCon
 import type {
   GetServerSidePropsContext as OriginalGetServerSidePropsContext,
   GetServerSidePropsResult,
+  GetStaticPropsContext as OriginalGetStaticPropsContext,
 } from "next/types";
 
 declare module "next" {
@@ -274,6 +275,14 @@ declare module "next" {
     Q extends ParsedUrlQuery = ParsedUrlQuery,
     D extends PreviewData = PreviewData
   > = OriginalGetServerSidePropsContext<Q, D> & { params: Q; };
+  
+  export type GetStaticPropsContext<
+    Params extends ParsedUrlQuery = ParsedUrlQuery,
+    Preview extends PreviewData = PreviewData
+  > = OriginalGetStaticPropsContext<Params, Preview> & {
+    params: Params;
+  };
+
 
   export type GetServerSideProps<
     P extends { [key: string]: any } = { [key: string]: any },
