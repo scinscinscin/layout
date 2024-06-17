@@ -31,6 +31,10 @@ type ImplementLayoutBackendOptions<Obj extends GenerateLayoutOptionsInterface> =
     (ctx: GetServerSidePropsContext, config: Obj["LayoutGSSPOptions"]) => Promise<LayoutGetServerSideProps<Obj>>
     ; }
 >
+& KIfTIsNotEmpty<Obj["Transform"], { executeTransform: (
+  ctx: GetServerSidePropsContext,
+  pageProps: {serverSideProps: any, internalProps: Obj["ServerSideLayoutProps"]}
+) => Promise<Obj["Transform"]> }>
 
 export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterface>(
   generateLayoutOptions: ImplementLayoutBackendOptions<Obj>
@@ -93,7 +97,11 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
 
         // Combine serverSideProps and internalProps, serialize it, and return it to the client
         const serverSideProps = await passthroughResults.props;
-        const props = { serverSideProps, internalProps: layoutGetServerSideProps.layout ?? {} };
+        const props = { serverSideProps, internalProps: layoutGetServerSideProps.layout ?? {}, transform: {} };
+
+        if ("executeTransform" in generateLayoutOptions)
+          props["transform"] = await generateLayoutOptions.executeTransform(context, props);
+
         return {
           props:
             typeof generateLayoutOptions.serialize !== "undefined" ? generateLayoutOptions.serialize(props) : props,
