@@ -131,11 +131,12 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
     const layoutGsspOptions = "layoutGsspOptions" in options ? options.layoutGsspOptions : {};
     const getServerSideProps =
       "getServerSideProps" in options
-        ? generateGetServerSideProps(options.getServerSideProps, {
+        ? generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(options.getServerSideProps, {
             caching: options.cacheServerSideProps,
             layoutGsspOptions,
           })
-        : generateGetServerSideProps(async () => ({ props: {} }), { layoutGsspOptions });
+          // @ts-ignore
+        : generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(async () => ({ props: {} }), { layoutGsspOptions });
 
     return getServerSideProps;
   }
