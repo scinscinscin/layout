@@ -52,7 +52,7 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
           ctx: GetServerSidePropsContext<Params>,
           locals: ServerSidePropsContext
         ) => Promise<GetServerSidePropsResult<Props>>,
-    options: { caching?: CachingOptions<ServerSidePropsContext>; ServerLayoutOptions?: ServerLayoutOptions }
+    options: { caching?: CachingOptions<ServerSidePropsContext>; serverLayoutOptions?: ServerLayoutOptions }
   ): (
     context: GetServerSidePropsContext<Params>
   ) => Promise<GetServerSidePropsResult<{ serverSideProps: Props; internalProps: ServerSideLayoutProps }>> {
@@ -64,7 +64,7 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
         // calculate server side layout props
         const layoutServerSideResult: LayoutGetServerSideProps<Obj> =
           "getServerSideProps" in generateLayoutOptions
-            ? await generateLayoutOptions.getServerSideProps(context, options.ServerLayoutOptions)
+            ? await generateLayoutOptions.getServerSideProps(context, options.serverLayoutOptions)
             : { props: {} };
 
         // Something wrong happened inside the generateInternalProps function, so return its output
@@ -123,21 +123,21 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
       cacheServerSideProps?: CachingOptions<ServerSidePropsContext>;
     }
   > &
-    KIfTIsNotEmpty<ServerLayoutOptions, { ServerLayoutOptions: ServerLayoutOptions }>;
+    KIfTIsNotEmpty<ServerLayoutOptions, { serverLayoutOptions: ServerLayoutOptions }>;
 
   function use<ServerSideProps, Route extends string = "">(
     options: CreatePageOptions<ServerSideProps, NextParameters<Route>>
   ) {
-    const ServerLayoutOptions = "ServerLayoutOptions" in options ? options.ServerLayoutOptions : {};
+    const serverLayoutOptions = "serverLayoutOptions" in options ? options.serverLayoutOptions : {};
     const getServerSideProps =
       "getServerSideProps" in options
         ? generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(options.getServerSideProps, {
             caching: options.cacheServerSideProps,
-            ServerLayoutOptions,
+            serverLayoutOptions,
           })
         : // @ts-ignore
           generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(async () => ({ props: {} }), {
-            ServerLayoutOptions,
+            serverLayoutOptions,
           });
 
     return getServerSideProps;

@@ -32,17 +32,17 @@ export function implementLayoutStatic<Obj extends GenerateLayoutOptionsInterface
         getStaticProps: {} extends Obj["ServerSidePropsContext"]
           ? (ctx: GetStaticPropsContext<Params>) => Promise<GetStaticPropsResult<Props>>
           : (ctx: GetStaticPropsContext<Params>, locals: Obj["ServerSidePropsContext"]) => Promise<GetStaticPropsResult<Props>>;
-      } & KIfTIsNotEmpty<ServerLayoutOptions, { ServerLayoutOptions: ServerLayoutOptions }>;
+      } & KIfTIsNotEmpty<ServerLayoutOptions, { serverLayoutOptions: ServerLayoutOptions }>;
 
   function use<Props, Route extends string = "">(
     opts: Opts<Props, NextParameters<Route>>
   ): GetStaticProps<{ serverSideProps: Props; internalProps: Obj["ServerSideLayoutProps"] }, NextParameters<Route>> {
     // The function exported under getStaticProps
     return async function (context: GetStaticPropsContext<NextParameters<Route>>) {
-      const ServerLayoutOptions = "ServerLayoutOptions" in opts ? opts.ServerLayoutOptions : {};
+      const serverLayoutOptions = "serverLayoutOptions" in opts ? opts.serverLayoutOptions : {};
 
       const results: LayoutGetStaticProps<Obj> = layoutOptions.getStaticProps
-        ? await layoutOptions.getStaticProps(context, ServerLayoutOptions)
+        ? await layoutOptions.getStaticProps(context, serverLayoutOptions)
         : { props: { layout: {}, locals: {} } };
 
       if ("props" in results === false) return results;
