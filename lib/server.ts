@@ -26,9 +26,9 @@ type ImplementLayoutBackendOptions<Obj extends GenerateLayoutOptionsInterface> =
 }
 & KIfTIsNotEmpty<Obj["ServerSideLayoutProps"] & Obj["ServerSidePropsContext"],
   { getServerSideProps: 
-    {} extends Obj["LayoutGSSPOptions"] ? 
+    {} extends Obj["ServerLayoutOptions"] ? 
     (ctx: GetServerSidePropsContext) => Promise<LayoutGetServerSideProps<Obj>> :
-    (ctx: GetServerSidePropsContext, config: Obj["LayoutGSSPOptions"]) => Promise<LayoutGetServerSideProps<Obj>>
+    (ctx: GetServerSidePropsContext, config: Obj["ServerLayoutOptions"]) => Promise<LayoutGetServerSideProps<Obj>>
     ; }
 >
 & KIfTIsNotEmpty<Obj["Transform"], { executeTransform: (
@@ -41,7 +41,7 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
 ) {
   type ServerSideLayoutProps = Obj["ServerSideLayoutProps"];
   type ServerSidePropsContext = Obj["ServerSidePropsContext"];
-  type LayoutGSSPOptions = Obj["LayoutGSSPOptions"];
+  type ServerLayoutOptions = Obj["ServerLayoutOptions"];
 
   const cacheGenerator = generateLayoutOptions.generateCache || (() => new LRU(100));
 
@@ -52,7 +52,7 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
           ctx: GetServerSidePropsContext<Params>,
           locals: ServerSidePropsContext
         ) => Promise<GetServerSidePropsResult<Props>>,
-    options: { caching?: CachingOptions<ServerSidePropsContext>; layoutGsspOptions?: LayoutGSSPOptions }
+    options: { caching?: CachingOptions<ServerSidePropsContext>; ServerLayoutOptions?: ServerLayoutOptions }
   ): (
     context: GetServerSidePropsContext<Params>
   ) => Promise<GetServerSidePropsResult<{ serverSideProps: Props; internalProps: ServerSideLayoutProps }>> {
@@ -64,7 +64,7 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
         // calculate server side layout props
         const layoutServerSideResult: LayoutGetServerSideProps<Obj> =
           "getServerSideProps" in generateLayoutOptions
-            ? await generateLayoutOptions.getServerSideProps(context, options.layoutGsspOptions)
+            ? await generateLayoutOptions.getServerSideProps(context, options.ServerLayoutOptions)
             : { props: {} };
 
         // Something wrong happened inside the generateInternalProps function, so return its output
@@ -123,20 +123,22 @@ export function implementLayoutBackend<Obj extends GenerateLayoutOptionsInterfac
       cacheServerSideProps?: CachingOptions<ServerSidePropsContext>;
     }
   > &
-    KIfTIsNotEmpty<LayoutGSSPOptions, { layoutGsspOptions: LayoutGSSPOptions }>;
+    KIfTIsNotEmpty<ServerLayoutOptions, { ServerLayoutOptions: ServerLayoutOptions }>;
 
   function use<ServerSideProps, Route extends string = "">(
     options: CreatePageOptions<ServerSideProps, NextParameters<Route>>
   ) {
-    const layoutGsspOptions = "layoutGsspOptions" in options ? options.layoutGsspOptions : {};
+    const ServerLayoutOptions = "ServerLayoutOptions" in options ? options.ServerLayoutOptions : {};
     const getServerSideProps =
       "getServerSideProps" in options
         ? generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(options.getServerSideProps, {
             caching: options.cacheServerSideProps,
-            layoutGsspOptions,
+            ServerLayoutOptions,
           })
-          // @ts-ignore
-        : generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(async () => ({ props: {} }), { layoutGsspOptions });
+        : // @ts-ignore
+          generateGetServerSideProps<ServerSideProps, NextParameters<Route>>(async () => ({ props: {} }), {
+            ServerLayoutOptions,
+          });
 
     return getServerSideProps;
   }

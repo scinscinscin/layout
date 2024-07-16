@@ -30,7 +30,7 @@ interface PrivateLayoutOpts extends GenerateLayoutOptionsImpl {
   ClientSideLayoutProps: { title: string };
   ExportedInternalProps: { user: UserT };
   ServerSidePropsContext: { user: User; db: PrismaClient };
-  LayoutGSSPOptions: { permisisonRequired: "admin" | "superadmin" };
+  ServerLayoutOptions: { permisisonRequired: "admin" | "superadmin" };
 }
 ```
 
@@ -48,7 +48,7 @@ We extend `GenerateLayoutOptionsImpl` so that we don't have to specify empty typ
    - The layout component passes the user DTO it got from the server into the page componen
  - `ServerSidePropsContext` - data that's passed from the layout's gSSP function and into the page's gSSP
    - Some page's gSSP might need the user object, which the layout's gSSP already calculated. This allows the reuse objects between the layout and page gSSPs. 
- - `LayoutGSSPOptions` - Options that are passed from the page and into
+ - `ServerLayoutOptions` - Options that are passed from the page and into
    - This allows you to pass parameters into the layout's gSSP. In this case, you can set the minimum required authorization for the user to access the page. 
 
 **Data flow visualization:**
@@ -108,7 +108,7 @@ export const PrivateLayoutBackend = implementLayoutBackend<PrivateLayoutOpts>({
   // You're asked to implement getServerSideProps if ServerSideLayoutProps has properties defined
   // Here, you can fetch data for the layout, and even do middleware-like auth checking
   // ctx is the Next.js GetServerSidePropsContext object
-  // options is the LayoutGSSPOptions object from the page
+  // options is the ServerLayoutOptions object from the page
   async getServerSideProps(ctx, options) {
     const user = await getUser(ctx);
 
@@ -223,7 +223,7 @@ export default PrivateLayoutFrontend.use<Props>((props) => {
 // The first type parameter dicates the props specific to the page
 // The second parameter specifies the route of the current page, used to determine params
 export const getServerSideProps = PrivateLayoutBackend.use<Props, "/admin/[postUuid]">({
-  layoutGsspOptions: { permissionsRequired: "admin" },
+  ServerLayoutOptions: { permissionsRequired: "admin" },
   
   // You're asked to implement this method if Props has properties defined.
   // ctx - the Next.js GetServerSidePropsContext object

@@ -14,15 +14,17 @@ type ImplementLayoutStaticOptions<Obj extends GenerateLayoutOptionsInterface> = 
 } & KIfTIsNotEmpty<
   Obj["ServerSideLayoutProps"] & Obj["ServerSidePropsContext"],
   {
-    getStaticProps: {} extends Obj["LayoutGSSPOptions"]
+    getStaticProps: {} extends Obj["ServerLayoutOptions"]
       ? (ctx: GetStaticPropsContext) => Promise<LayoutGetStaticProps<Obj>>
-      : (ctx: GetStaticPropsContext, config: Obj["LayoutGSSPOptions"]) => Promise<LayoutGetStaticProps<Obj>>;
+      : (ctx: GetStaticPropsContext, config: Obj["ServerLayoutOptions"]) => Promise<LayoutGetStaticProps<Obj>>;
   }
 >;
 
 export function implementLayoutStatic<Obj extends GenerateLayoutOptionsInterface>(
   layoutOptions: ImplementLayoutStaticOptions<Obj>
 ) {
+  type ServerLayoutOptions = Obj["ServerLayoutOptions"];
+
   type Opts<Props, Params extends ParsedUrlQuery> = {} extends Props
     ? {}
     : {
@@ -30,15 +32,17 @@ export function implementLayoutStatic<Obj extends GenerateLayoutOptionsInterface
         getStaticProps: {} extends Obj["ServerSidePropsContext"]
           ? (ctx: GetStaticPropsContext<Params>) => Promise<GetStaticPropsResult<Props>>
           : (ctx: GetStaticPropsContext<Params>, locals: Obj["ServerSidePropsContext"]) => Promise<GetStaticPropsResult<Props>>;
-      };
+      } & KIfTIsNotEmpty<ServerLayoutOptions, { ServerLayoutOptions: ServerLayoutOptions }>;
 
   function use<Props, Route extends string = "">(
     opts: Opts<Props, NextParameters<Route>>
   ): GetStaticProps<{ serverSideProps: Props; internalProps: Obj["ServerSideLayoutProps"] }, NextParameters<Route>> {
     // The function exported under getStaticProps
     return async function (context: GetStaticPropsContext<NextParameters<Route>>) {
+      const ServerLayoutOptions = "ServerLayoutOptions" in opts ? opts.ServerLayoutOptions : {};
+
       const results: LayoutGetStaticProps<Obj> = layoutOptions.getStaticProps
-        ? await layoutOptions.getStaticProps(context)
+        ? await layoutOptions.getStaticProps(context, ServerLayoutOptions)
         : { props: { layout: {}, locals: {} } };
 
       if ("props" in results === false) return results;

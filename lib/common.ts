@@ -8,7 +8,7 @@ export type GenerateLayoutOptionsInterface = {
   /** Data sent to the page's getServerSideProps function */
   ServerSidePropsContext: { [key: string]: any };
   /** Data sent to the layout's getServerSideProps function */
-  LayoutGSSPOptions: { [key: string]: any };
+  ServerLayoutOptions: { [key: string]: any };
   Transform: { [key: string]: any };
 };
 
@@ -17,6 +17,6 @@ export type GenerateLayoutOptionsImpl = {
   ClientSideLayoutProps: {};
   ExportedInternalProps: {};
   ServerSidePropsContext: {};
-  LayoutGSSPOptions: {};
+  ServerLayoutOptions: {};
   Transform: {};
 };
