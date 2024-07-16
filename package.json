@@ -1,6 +1,6 @@
 {
   "name": "@scinorandex/layout",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Generate next.js layouts with ease",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

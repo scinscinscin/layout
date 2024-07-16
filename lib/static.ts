@@ -25,14 +25,15 @@ export function implementLayoutStatic<Obj extends GenerateLayoutOptionsInterface
 ) {
   type ServerLayoutOptions = Obj["ServerLayoutOptions"];
 
-  type Opts<Props, Params extends ParsedUrlQuery> = {} extends Props
+  type Opts<Props, Params extends ParsedUrlQuery> = ({} extends Props
     ? {}
     : {
         // prettier-ignore
         getStaticProps: {} extends Obj["ServerSidePropsContext"]
           ? (ctx: GetStaticPropsContext<Params>) => Promise<GetStaticPropsResult<Props>>
           : (ctx: GetStaticPropsContext<Params>, locals: Obj["ServerSidePropsContext"]) => Promise<GetStaticPropsResult<Props>>;
-      } & KIfTIsNotEmpty<ServerLayoutOptions, { serverLayoutOptions: ServerLayoutOptions }>;
+      }) &
+    KIfTIsNotEmpty<ServerLayoutOptions, { serverLayoutOptions: ServerLayoutOptions }>;
 
   function use<Props, Route extends string = "">(
     opts: Opts<Props, NextParameters<Route>>
