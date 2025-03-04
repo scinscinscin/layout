@@ -51,7 +51,8 @@ export function implementLayoutStatic<Obj extends GenerateLayoutOptionsInterface
 
       const inner: GetStaticPropsResult<Props> =
         "getStaticProps" in opts ? await opts.getStaticProps(context, locals) : { props: {} as Props };
-      if ("props" in inner === false) return inner;
+      if ("props" in inner === false)
+        return "revalidate" in results ? { ...inner, revalidate: inner.revalidate ?? results.revalidate } : inner;
 
       const _props = { serverSideProps: inner.props, internalProps: layout };
       const props = layoutOptions.serialize ? layoutOptions.serialize(_props) : _props;
